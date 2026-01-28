@@ -3,29 +3,46 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hub-template-python"
-version = "0.0.1"
-description = "Your project description"
+name = "csv-postgres-pipeline"
+version = "0.1.0"
+description = "CLI tool for streaming CSV files into PostgreSQL using COPY protocol"
 authors = [
-  {name = "Your Name", email = "your.email@nearform.com"}
+  {name = "NearForm", email = "engineering@nearform.com"}
 ]
-urls = {Homepage = "https://github.com/nearform/your-project"}
+urls = {Homepage = "https://github.com/nearform/python-sdd-2"}
 requires-python = ">=3.13"
-
 readme = "README.md"
 
-dependencies = []
-[project.optional-dependencies]
-dev = [
-  "pytest>=8.0.0",
-  "mypy>=1.0.0",
-  "ruff>=0.8.0",
-  "pre-commit>=4.0.0"
+dependencies = [
+    "psycopg[pool]>=3.1",
+    "pydantic>=2.0",
+    "click>=8.0",
+    "rich>=13.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-postgresql>=6.0.0",
+    "pytest-dotenv>=0.5.0",
+    "python-dotenv>=1.0.0",
+    "mypy>=1.8.0",
+    "types-click>=7.1.0",
+    "types-psycopg2>=2.9.0",
+    "ruff>=0.8.0",
+    "pylint>=3.0.0",
+    "pre-commit>=4.0.0",
+]
+
+[project.scripts]
+csv-ingest = "src.csv_postgres_pipeline.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src", "src.*"]
 
 [tool.bumpversion]
-current_version = "0.0.1"
+current_version = "0.1.0"
 commit = false
 tag = false
 
@@ -35,6 +52,7 @@ filename = "pyproject.toml"
 [tool.ruff]
 line-length = 90
 target-version = "py313"
+src = [".", "src", "tests"]
 
 [tool.ruff.lint]
 select = [
@@ -72,6 +90,7 @@ exclude = [
 
 [tool.mypy]
 python_version = "3.13"
+strict = true
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -80,13 +99,31 @@ check_untyped_defs = true
 no_implicit_optional = true
 warn_no_return = true
 strict_equality = true
+ignore_missing_imports = false
+mypy_path = "."
+
+[[tool.mypy.overrides]]
+module = "psycopg.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = "tests.*"
-disallow_untyped_defs = false
+module = "psycopg_pool.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "dotenv.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pytest.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "rich.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
+pythonpath = ["."]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
@@ -96,3 +133,49 @@ addopts = [
     "--strict-markers",
     "--tb=short",
 ]
+markers = [
+    "integration: marks tests as integration tests (require database)",
+    "unit: marks tests as unit tests",
+    "contract: marks tests as contract tests",
+]
+env_files = [".env"]
+
+[tool.pylint.main]
+py-version = "3.13"
+source-roots = ["."]
+ignore-patterns = ["test_.*\\.py"]
+
+[tool.pylint.messages_control]
+disable = [
+    "missing-module-docstring",
+    "too-few-public-methods",
+    # CLI functions have many options by design
+    "too-many-arguments",
+    "too-many-positional-arguments",
+    "too-many-locals",
+    "too-many-branches",
+    "too-many-statements",
+    # Lazy imports for performance
+    "import-outside-toplevel",
+    # We catch broad exceptions intentionally in some cases
+    "broad-exception-caught",
+    # Our ConnectionError is intentional
+    "redefined-builtin",
+    # Click handles parameters via decorators
+    "no-value-for-parameter",
+    # Style preference - elif after raise is acceptable
+    "no-else-raise",
+    # Some arguments are for API compatibility
+    "unused-argument",
+    # Pylint doesn't understand psycopg context managers
+    "no-member",
+]
+
+[tool.pylint.format]
+max-line-length = 90
+
+[tool.pylint.design]
+max-args = 15
+max-locals = 35
+max-branches = 25
+max-statements = 75

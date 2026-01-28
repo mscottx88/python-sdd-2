@@ -4,15 +4,18 @@ repos:
     hooks:
       - id: ruff
         name: ruff-check
+        args: [--fix]
 
       - id: ruff-format
-        args: [--check]
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.13.0
     hooks:
       - id: mypy
-        additional_dependencies: []
+        additional_dependencies:
+          - pydantic>=2.0
+          - click>=8.0
+          - types-click
         args: [--config-file=pyproject.toml]
 
   - repo: https://github.com/compilerla/conventional-pre-commit
@@ -23,6 +26,14 @@ repos:
 
   - repo: local
     hooks:
+      - id: pylint
+        name: pylint
+        entry: pylint
+        language: system
+        types: [python]
+        args: [--rcfile=pyproject.toml]
+        exclude: ^tests/
+
       - id: pytest
         name: pytest
         entry: uv run pytest
@@ -30,3 +41,12 @@ repos:
         files: \.py$
         pass_filenames: false
         stages: [pre-commit]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
