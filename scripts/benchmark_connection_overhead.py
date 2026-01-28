@@ -29,15 +29,9 @@ from typing import Literal
 
 from pydantic import SecretStr
 
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-# pylint: disable=wrong-import-position
-# These imports must come after sys.path modification
 from src.csv_postgres_pipeline.database import close_pool, create_pool
 from src.csv_postgres_pipeline.ingestion import ingest, ingest_streaming
 from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
-# pylint: enable=wrong-import-position
 
 
 def create_test_csv(file_path: Path, rows: int = 100) -> None:
