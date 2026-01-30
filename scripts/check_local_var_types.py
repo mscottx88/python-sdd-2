@@ -27,9 +27,10 @@ Exemptions (variables that don't need annotations):
 import ast
 import sys
 from pathlib import Path
-from typing import Any
 
 
+# pylint: disable=invalid-name
+# JUSTIFICATION: AST visitor methods must use names dictated by ast.NodeVisitor (visit_*)
 class LocalVariableTypeChecker(ast.NodeVisitor):
     """AST visitor to detect local variables without type annotations."""
 
@@ -213,6 +214,9 @@ class LocalVariableTypeChecker(ast.NodeVisitor):
         return 1
 
 
+# pylint: enable=invalid-name
+
+
 def check_file(filepath: Path) -> int:
     """Check a single Python file for missing local variable type annotations.
 
@@ -234,9 +238,12 @@ def check_file(filepath: Path) -> int:
     except SyntaxError as e:
         print(f"Syntax error in {filepath}: {e}")
         return 1
+    # pylint: disable=broad-exception-caught
+    # JUSTIFICATION: Need to catch all exceptions to report file check errors without crashing
     except Exception as e:  # noqa: BLE001
         print(f"Error checking {filepath}: {e}")
         return 1
+    # pylint: enable=broad-exception-caught
 
 
 def main() -> int:
@@ -264,7 +271,7 @@ def main() -> int:
             exit_code = 1
             continue
 
-        if not filepath.suffix == ".py":
+        if filepath.suffix != ".py":
             # Skip non-Python files
             continue
 

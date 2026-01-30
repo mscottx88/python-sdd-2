@@ -75,6 +75,8 @@ ignore = []
 "tests/*" = [
     "S101",  # asserts allowed in tests
 ]
+# JUSTIFICATION: AST visitor methods must use names dictated by ast.NodeVisitor (visit_*)
+"scripts/check_local_var_types.py" = ["N802"]
 
 [tool.ruff.format]
 exclude = [
