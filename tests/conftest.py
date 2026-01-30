@@ -66,13 +66,29 @@ def is_postgres_container_running() -> bool:
 
 @pytest.fixture(scope="session")
 def docker_available() -> bool:
-    """Session-scoped fixture to check Docker availability."""
+    """Session-scoped fixture to check Docker availability.
+
+    If SKIP_DOCKER_CHECK environment variable is set to a truthy value,
+    skips the Docker check and returns True. This is useful in CI/CD
+    environments where PostgreSQL is provided as a service.
+    """
+    skip_check: str = os.environ.get("SKIP_DOCKER_CHECK", "").lower()
+    if skip_check in ("true", "1", "yes"):
+        return True
     return is_docker_running()
 
 
 @pytest.fixture(scope="session")
 def postgres_available(docker_available: bool) -> bool:  # pylint: disable=redefined-outer-name
-    """Session-scoped fixture to check PostgreSQL container availability."""
+    """Session-scoped fixture to check PostgreSQL container availability.
+
+    If SKIP_DOCKER_CHECK environment variable is set to a truthy value,
+    skips the Docker check and returns True. This is useful in CI/CD
+    environments where PostgreSQL is provided as a service.
+    """
+    skip_check: str = os.environ.get("SKIP_DOCKER_CHECK", "").lower()
+    if skip_check in ("true", "1", "yes"):
+        return True
     if not docker_available:
         return False
     return is_postgres_container_running()
