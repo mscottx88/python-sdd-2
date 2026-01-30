@@ -50,7 +50,7 @@ tag = false
 filename = "pyproject.toml"
 
 [tool.ruff]
-line-length = 90
+line-length = 100
 target-version = "py313"
 src = [".", "src", "tests"]
 
@@ -122,6 +122,12 @@ ignore_missing_imports = true
 module = "rich.*"
 ignore_missing_imports = true
 
+# JUSTIFICATION: pytest.fixture decorator lacks complete type stubs in pytest < 8.0
+# This causes "untyped decorator makes function untyped" errors for all fixtures
+[[tool.mypy.overrides]]
+module = "tests.*"
+disable_error_code = ["misc"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
@@ -143,36 +149,9 @@ env_files = [".env"]
 [tool.pylint.main]
 py-version = "3.13"
 source-roots = ["."]
-ignore-patterns = ["test_.*\\.py"]
-
-[tool.pylint.messages_control]
-disable = [
-    "missing-module-docstring",
-    "too-few-public-methods",
-    # CLI functions have many options by design
-    "too-many-arguments",
-    "too-many-positional-arguments",
-    "too-many-locals",
-    "too-many-branches",
-    "too-many-statements",
-    # Lazy imports for performance
-    "import-outside-toplevel",
-    # We catch broad exceptions intentionally in some cases
-    "broad-exception-caught",
-    # Our ConnectionError is intentional
-    "redefined-builtin",
-    # Click handles parameters via decorators
-    "no-value-for-parameter",
-    # Style preference - elif after raise is acceptable
-    "no-else-raise",
-    # Some arguments are for API compatibility
-    "unused-argument",
-    # Pylint doesn't understand psycopg context managers
-    "no-member",
-]
 
 [tool.pylint.format]
-max-line-length = 90
+max-line-length = 100
 
 [tool.pylint.design]
 max-args = 15

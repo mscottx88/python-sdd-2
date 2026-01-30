@@ -5,10 +5,17 @@ Requires PostgreSQL (via Docker/testcontainers or local instance).
 Written following TDD - these tests should FAIL before implementation.
 """
 
+import tracemalloc
 from pathlib import Path
 from typing import Any
 
 import pytest
+
+from src.csv_postgres_pipeline import ingestion
+from src.csv_postgres_pipeline.database import create_connection, get_table_schema
+from src.csv_postgres_pipeline.exceptions import EmptyFileError, MalformedRowError
+from src.csv_postgres_pipeline.ingestion import ingest, ingest_streaming
+from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig, IngestionResult
 
 
 @pytest.mark.integration
@@ -17,14 +24,10 @@ class TestBasicIngestion:
 
     def test_ingestion_module_exists(self) -> None:
         """Test that ingestion module can be imported."""
-        from src.csv_postgres_pipeline import ingestion
-
         assert ingestion is not None
 
     def test_ingest_function_exists(self) -> None:
         """Test that ingest function exists."""
-        from src.csv_postgres_pipeline.ingestion import ingest
-
         assert ingest is not None
 
     def test_ingest_creates_new_table(
@@ -33,11 +36,7 @@ class TestBasicIngestion:
         db_connection_params: Any,
     ) -> None:
         """Test ingestion creates a new table when it doesn't exist."""
-        from src.csv_postgres_pipeline.database import create_connection
-        from src.csv_postgres_pipeline.ingestion import ingest
-        from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
 
         # Drop table if it exists from previous test runs
         with create_connection(db_config) as conn:
@@ -45,12 +44,12 @@ class TestBasicIngestion:
                 cur.execute("DROP TABLE IF EXISTS test_new_table")
             conn.commit()
 
-        csv_config = CSVConfig(
+        csv_config: CSVConfig = CSVConfig(
             file_path=sample_csv_file,
             table_name="test_new_table",
         )
 
-        result = ingest(db_config, csv_config)
+        result: IngestionResult = ingest(db_config, csv_config)
 
         assert result.status == "success"
         assert result.rows_inserted == 3
@@ -62,21 +61,18 @@ class TestBasicIngestion:
         db_connection_params: Any,
     ) -> None:
         """Test ingestion appends data to an existing table."""
-        from src.csv_postgres_pipeline.ingestion import ingest
-        from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        csv_config = CSVConfig(
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        csv_config: CSVConfig = CSVConfig(
             file_path=sample_csv_file,
             table_name="test_append_table",
         )
 
         # First ingestion creates table
-        result1 = ingest(db_config, csv_config)
+        result1: IngestionResult = ingest(db_config, csv_config)
         assert result1.rows_inserted == 3
 
         # Second ingestion appends
-        result2 = ingest(db_config, csv_config)
+        result2: IngestionResult = ingest(db_config, csv_config)
         assert result2.rows_inserted == 3
         assert result2.table_created is False
 
@@ -86,16 +82,13 @@ class TestBasicIngestion:
         db_connection_params: Any,
     ) -> None:
         """Test ingestion returns result with correct row count."""
-        from src.csv_postgres_pipeline.ingestion import ingest
-        from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        csv_config = CSVConfig(
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        csv_config: CSVConfig = CSVConfig(
             file_path=sample_csv_file,
             table_name="test_row_count_table",
         )
 
-        result = ingest(db_config, csv_config)
+        result: IngestionResult = ingest(db_config, csv_config)
 
         assert result.rows_processed == 3
         assert result.rows_inserted == 3
@@ -111,11 +104,8 @@ class TestIngestionErrorHandling:
         db_connection_params: Any,
     ) -> None:
         """Test ingestion raises error for non-existent file."""
-        from src.csv_postgres_pipeline.ingestion import ingest
-        from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        csv_config = CSVConfig(
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        csv_config: CSVConfig = CSVConfig(
             file_path=Path("/nonexistent/file.csv"),
             table_name="test_table",
         )
@@ -129,12 +119,8 @@ class TestIngestionErrorHandling:
         db_connection_params: Any,
     ) -> None:
         """Test ingestion fails for empty file in strict mode."""
-        from src.csv_postgres_pipeline.exceptions import EmptyFileError
-        from src.csv_postgres_pipeline.ingestion import ingest
-        from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        csv_config = CSVConfig(
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        csv_config: CSVConfig = CSVConfig(
             file_path=empty_csv_file,
             table_name="test_empty_table",
             empty_mode="strict",
@@ -149,12 +135,8 @@ class TestIngestionErrorHandling:
         db_connection_params: Any,
     ) -> None:
         """Test ingestion fails for malformed file in strict mode."""
-        from src.csv_postgres_pipeline.exceptions import MalformedRowError
-        from src.csv_postgres_pipeline.ingestion import ingest
-        from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        csv_config = CSVConfig(
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        csv_config: CSVConfig = CSVConfig(
             file_path=malformed_csv_file,
             table_name="test_malformed_table",
             row_mode="strict",
@@ -169,17 +151,14 @@ class TestIngestionErrorHandling:
         db_connection_params: Any,
     ) -> None:
         """Test ingestion skips malformed rows in skip mode."""
-        from src.csv_postgres_pipeline.ingestion import ingest
-        from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        csv_config = CSVConfig(
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        csv_config: CSVConfig = CSVConfig(
             file_path=malformed_csv_file,
             table_name="test_skip_table",
             row_mode="skip",
         )
 
-        result = ingest(db_config, csv_config)
+        result: IngestionResult = ingest(db_config, csv_config)
 
         assert result.status in ("success", "partial")
         assert result.rows_skipped > 0
@@ -196,12 +175,8 @@ class TestIngestionAtomicity:
         db_connection_params: Any,
     ) -> None:
         """Test that failed ingestion rolls back all rows."""
-        from src.csv_postgres_pipeline.exceptions import MalformedRowError
-        from src.csv_postgres_pipeline.ingestion import ingest
-        from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        csv_config = CSVConfig(
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        csv_config: CSVConfig = CSVConfig(
             file_path=malformed_csv_file,
             table_name="test_rollback_table",
             row_mode="strict",
@@ -213,17 +188,15 @@ class TestIngestionAtomicity:
 
         # Verify no data was committed (table should be empty or not exist)
         # This requires checking the database directly
-        from src.csv_postgres_pipeline.database import create_connection, get_table_schema
-
         with create_connection(db_config) as conn:
-            schema = get_table_schema(conn, "test_rollback_table")
+            schema: Any = get_table_schema(conn, "test_rollback_table")
             # Table either doesn't exist or has no rows
             if schema is not None:
                 with conn.cursor() as cur:
                     cur.execute("SELECT COUNT(*) FROM test_rollback_table")
-                    result = cur.fetchone()
+                    result: tuple[Any, ...] | None = cur.fetchone()
                     assert result is not None
-                    count = result[0]
+                    count: Any = result[0]
                     assert count == 0
 
 
@@ -233,8 +206,6 @@ class TestLargeFileHandling:
 
     def test_ingest_streaming_function_exists(self) -> None:
         """Test that ingest_streaming function exists."""
-        from src.csv_postgres_pipeline.ingestion import ingest_streaming
-
         assert ingest_streaming is not None
 
     def test_ingest_streaming_large_file(
@@ -243,17 +214,14 @@ class TestLargeFileHandling:
         db_connection_params: Any,
     ) -> None:
         """Test streaming ingestion handles large files efficiently."""
-        from src.csv_postgres_pipeline.ingestion import ingest_streaming
-        from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        csv_config = CSVConfig(
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        csv_config: CSVConfig = CSVConfig(
             file_path=large_csv_file,
             table_name="test_large_streaming",
             chunk_size=1000,
         )
 
-        result = ingest_streaming(db_config, csv_config)
+        result: IngestionResult = ingest_streaming(db_config, csv_config)
 
         assert result.status == "success"
         assert result.rows_inserted == 10000
@@ -268,13 +236,8 @@ class TestLargeFileHandling:
         Note: This test verifies that peak memory stays below 100MB
         even for large files (the large_csv_file fixture has 10000 rows).
         """
-        import tracemalloc
-
-        from src.csv_postgres_pipeline.ingestion import ingest_streaming
-        from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        csv_config = CSVConfig(
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        csv_config: CSVConfig = CSVConfig(
             file_path=large_csv_file,
             table_name="test_memory_bounded",
             chunk_size=500,  # Smaller chunks for memory efficiency
@@ -283,13 +246,15 @@ class TestLargeFileHandling:
         # Track memory usage
         tracemalloc.start()
 
-        result = ingest_streaming(db_config, csv_config)
+        result: IngestionResult = ingest_streaming(db_config, csv_config)
 
         # Get peak memory usage
+        _: int
+        peak: int
         _, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
 
-        peak_mb = peak / (1024 * 1024)
+        peak_mb: float = peak / (1024 * 1024)
 
         assert result.status == "success"
         assert result.rows_inserted == 10000
@@ -303,18 +268,15 @@ class TestLargeFileHandling:
         db_connection_params: Any,
     ) -> None:
         """Test streaming ingestion with row validation in skip mode."""
-        from src.csv_postgres_pipeline.ingestion import ingest_streaming
-        from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        csv_config = CSVConfig(
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        csv_config: CSVConfig = CSVConfig(
             file_path=malformed_csv_file,
             table_name="test_streaming_skip",
             row_mode="skip",
             chunk_size=100,
         )
 
-        result = ingest_streaming(db_config, csv_config)
+        result: IngestionResult = ingest_streaming(db_config, csv_config)
 
         assert result.status == "partial"
         assert result.rows_inserted == 1
@@ -326,11 +288,8 @@ class TestLargeFileHandling:
         db_connection_params: Any,
     ) -> None:
         """Test streaming ingestion can track progress via callback."""
-        from src.csv_postgres_pipeline.ingestion import ingest_streaming
-        from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        csv_config = CSVConfig(
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        csv_config: CSVConfig = CSVConfig(
             file_path=large_csv_file,
             table_name="test_progress_tracking",
             chunk_size=1000,
@@ -341,7 +300,9 @@ class TestLargeFileHandling:
         def on_progress(rows_processed: int) -> None:
             progress_updates.append(rows_processed)
 
-        result = ingest_streaming(db_config, csv_config, progress_callback=on_progress)
+        result: IngestionResult = ingest_streaming(
+            db_config, csv_config, progress_callback=on_progress
+        )
 
         assert result.status == "success"
         # Should have received multiple progress updates

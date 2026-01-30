@@ -2,6 +2,7 @@
 
 import csv
 import os
+import subprocess
 import tempfile
 from collections.abc import Generator
 from pathlib import Path
@@ -9,6 +10,9 @@ from typing import Any, TypedDict
 
 import pytest
 from dotenv import load_dotenv
+from pydantic import SecretStr
+
+from src.csv_postgres_pipeline.models import DatabaseConfig
 
 # Load environment variables from .env file for all tests
 load_dotenv()
@@ -26,10 +30,8 @@ class DBConnectionParams(TypedDict):
 
 def is_docker_running() -> bool:
     """Check if Docker Desktop is running and accessible."""
-    import subprocess
-
     try:
-        result = subprocess.run(  # noqa: S603
+        result: subprocess.CompletedProcess[bytes] = subprocess.run(  # noqa: S603
             ["docker", "info"],  # noqa: S607
             capture_output=True,
             timeout=5,
@@ -42,11 +44,16 @@ def is_docker_running() -> bool:
 
 def is_postgres_container_running() -> bool:
     """Check if a PostgreSQL container is running and healthy."""
-    import subprocess
-
     try:
-        result = subprocess.run(  # noqa: S603
-            ["docker", "ps", "--filter", "ancestor=postgres", "--format", "{{.Names}}"],  # noqa: S607, E501
+        result: subprocess.CompletedProcess[str] = subprocess.run(  # noqa: S603
+            [  # noqa: S607
+                "docker",
+                "ps",
+                "--filter",
+                "ancestor=postgres",
+                "--format",
+                "{{.Names}}",
+            ],
             capture_output=True,
             text=True,
             timeout=5,
@@ -64,7 +71,7 @@ def docker_available() -> bool:
 
 
 @pytest.fixture(scope="session")
-def postgres_available(docker_available: bool) -> bool:
+def postgres_available(docker_available: bool) -> bool:  # pylint: disable=redefined-outer-name
     """Session-scoped fixture to check PostgreSQL container availability."""
     if not docker_available:
         return False
@@ -81,12 +88,12 @@ def sample_csv_file() -> Generator[Path]:
         newline="",
         encoding="utf-8",
     ) as f:
-        writer = csv.writer(f)
+        writer: Any = csv.writer(f)  # csv.writer returns internal _writer type
         writer.writerow(["id", "name", "email"])
         writer.writerow(["1", "Alice", "alice@example.com"])
         writer.writerow(["2", "Bob", "bob@example.com"])
         writer.writerow(["3", "Charlie", "charlie@example.com"])
-        temp_path = Path(f.name)
+        temp_path: Path = Path(f.name)
 
     yield temp_path
 
@@ -105,7 +112,7 @@ def empty_csv_file() -> Generator[Path]:
         newline="",
         encoding="utf-8",
     ) as f:
-        temp_path = Path(f.name)
+        temp_path: Path = Path(f.name)
 
     yield temp_path
 
@@ -123,9 +130,9 @@ def headers_only_csv_file() -> Generator[Path]:
         newline="",
         encoding="utf-8",
     ) as f:
-        writer = csv.writer(f)
+        writer: Any = csv.writer(f)  # csv.writer returns internal _writer type
         writer.writerow(["id", "name", "email"])
-        temp_path = Path(f.name)
+        temp_path: Path = Path(f.name)
 
     yield temp_path
 
@@ -143,12 +150,12 @@ def malformed_csv_file() -> Generator[Path]:
         newline="",
         encoding="utf-8",
     ) as f:
-        writer = csv.writer(f)
+        writer: Any = csv.writer(f)  # csv.writer returns internal _writer type
         writer.writerow(["id", "name", "email"])
         writer.writerow(["1", "Alice", "alice@example.com"])
         writer.writerow(["2", "Bob"])  # Missing email column
         writer.writerow(["3", "Charlie", "charlie@example.com", "extra"])  # Extra column
-        temp_path = Path(f.name)
+        temp_path: Path = Path(f.name)
 
     yield temp_path
 
@@ -166,7 +173,7 @@ def large_csv_file() -> Generator[Path]:
         newline="",
         encoding="utf-8",
     ) as f:
-        writer = csv.writer(f)
+        writer: Any = csv.writer(f)  # csv.writer returns internal _writer type
         writer.writerow(["id", "name", "email", "department"])
         for i in range(10000):
             writer.writerow(
@@ -177,7 +184,7 @@ def large_csv_file() -> Generator[Path]:
                     f"Dept_{i % 10}",
                 ]
             )
-        temp_path = Path(f.name)
+        temp_path: Path = Path(f.name)
 
     yield temp_path
 
@@ -198,16 +205,14 @@ def db_connection_params() -> DBConnectionParams:
 
 
 @pytest.fixture
-def db_config(db_connection_params: DBConnectionParams) -> Any:
+def db_config(
+    db_connection_params: DBConnectionParams,  # pylint: disable=redefined-outer-name
+) -> DatabaseConfig:
     """Return DatabaseConfig instance from connection parameters.
 
     This fixture provides a properly typed DatabaseConfig for tests,
     avoiding mypy issues with dict unpacking.
     """
-    from pydantic import SecretStr
-
-    from src.csv_postgres_pipeline.models import DatabaseConfig
-
     return DatabaseConfig(
         host=db_connection_params["host"],
         port=db_connection_params["port"],

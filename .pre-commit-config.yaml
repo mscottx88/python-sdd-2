@@ -26,6 +26,14 @@ repos:
 
   - repo: local
     hooks:
+      - id: check-local-var-types
+        name: check-local-var-types
+        entry: python scripts/check_local_var_types.py
+        language: system
+        types: [python]
+        pass_filenames: true
+        description: "Enforce local variable type annotations (constitutional requirement)"
+
       - id: pylint
         name: pylint
         entry: pylint

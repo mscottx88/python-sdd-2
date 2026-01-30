@@ -25,13 +25,13 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import SecretStr
 
 from src.csv_postgres_pipeline.database import close_pool, create_pool
 from src.csv_postgres_pipeline.ingestion import ingest, ingest_streaming
-from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
+from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig, IngestionResult
 
 
 def create_test_csv(file_path: Path, rows: int = 100) -> None:
@@ -64,7 +64,7 @@ def benchmark_without_pooling(
     Returns:
         Tuple of (total_time_seconds, list_of_individual_times).
     """
-    table_name = "benchmark_no_pool"
+    table_name: str = "benchmark_no_pool"
     times: list[float] = []
 
     print(f"\n🔍 Benchmarking WITHOUT pooling ({iterations} iterations)...")
@@ -79,15 +79,15 @@ def benchmark_without_pooling(
             chunk_size=1000,
         )
 
-        start = time.perf_counter()
-        result = ingest(db_config, csv_config)
-        elapsed = time.perf_counter() - start
+        start: float = time.perf_counter()
+        result: IngestionResult = ingest(db_config, csv_config)
+        elapsed: float = time.perf_counter() - start
 
         times.append(elapsed)
         print(f"  Iteration {i + 1}: {elapsed:.4f}s ({result.rows_inserted} rows)")
 
-    total_time = sum(times)
-    avg_time = statistics.mean(times)
+    total_time: float = sum(times)
+    avg_time: float = statistics.mean(times)
     print(f"✅ Total time: {total_time:.4f}s (avg: {avg_time:.4f}s per operation)")
 
     return total_time, times
@@ -108,13 +108,13 @@ def benchmark_with_pooling(
     Returns:
         Tuple of (total_time_seconds, list_of_individual_times).
     """
-    table_name = "benchmark_with_pool"
+    table_name: str = "benchmark_with_pool"
     times: list[float] = []
 
     print(f"\n🔍 Benchmarking WITH pooling ({iterations} iterations)...")
 
     # Create connection pool once
-    pool = create_pool(db_config)
+    pool: Any = create_pool(db_config)
 
     try:
         for i in range(iterations):
@@ -127,17 +127,17 @@ def benchmark_with_pooling(
                 chunk_size=1000,
             )
 
-            start = time.perf_counter()
-            result = ingest_streaming(db_config, csv_config, pool=pool)
-            elapsed = time.perf_counter() - start
+            start: float = time.perf_counter()
+            result: IngestionResult = ingest_streaming(db_config, csv_config, pool=pool)
+            elapsed: float = time.perf_counter() - start
 
             times.append(elapsed)
             print(f"  Iteration {i + 1}: {elapsed:.4f}s ({result.rows_inserted} rows)")
     finally:
         close_pool(pool)
 
-    total_time = sum(times)
-    avg_time = statistics.mean(times)
+    total_time: float = sum(times)
+    avg_time: float = statistics.mean(times)
     print(f"✅ Total time: {total_time:.4f}s (avg: {avg_time:.4f}s per operation)")
 
     return total_time, times
@@ -156,8 +156,8 @@ def calculate_improvement(
     Returns:
         Tuple of (reduction_seconds, reduction_percentage, pass_fail_status).
     """
-    reduction_seconds = baseline_time - pooled_time
-    reduction_percentage = (reduction_seconds / baseline_time) * 100
+    reduction_seconds: float = baseline_time - pooled_time
+    reduction_percentage: float = (reduction_seconds / baseline_time) * 100
 
     status: Literal["PASS", "FAIL"] = "PASS" if reduction_percentage >= 50.0 else "FAIL"
 
@@ -184,6 +184,8 @@ def main() -> int:
             password=SecretStr(os.getenv("PGPASSWORD", "")),
             pool_max_size=10,
         )
+    # pylint: disable=broad-exception-caught
+    # JUSTIFICATION: CLI script catches all config errors for user-friendly messages
     except Exception as e:
         print(f"\n❌ Configuration error: {e}")
         print("\nRequired environment variables:")
@@ -262,9 +264,14 @@ def main() -> int:
         print("=" * 70)
         return 1
 
+    # pylint: disable=broad-exception-caught
+    # JUSTIFICATION: CLI script catches all benchmark errors for user-friendly messages
     except Exception as e:
         print(f"\n❌ Benchmark failed: {e}")
+        # pylint: disable=import-outside-toplevel
+        # JUSTIFICATION: Lazy import - only load traceback when exception occurs
         import traceback
+        # pylint: enable=import-outside-toplevel
 
         traceback.print_exc()
         return 1

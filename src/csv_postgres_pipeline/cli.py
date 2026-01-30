@@ -6,6 +6,7 @@ Provides the csv-ingest command with all configuration options.
 import json
 import sys
 import tracemalloc
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +24,7 @@ from src.csv_postgres_pipeline.exceptions import (
     SchemaMismatchError,
 )
 from src.csv_postgres_pipeline.ingestion import ingest_streaming_with_pool
-from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
+from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig, IngestionResult
 
 # Exit codes per contract
 EXIT_SUCCESS = 0
@@ -117,6 +118,7 @@ EXIT_CONFIG_ERROR = 4
     default=5,
     help="Max connection pool size (1-50)",
 )
+# pylint: disable=too-many-positional-arguments  # JUSTIFICATION: Click decorator pattern requires one parameter per CLI option
 def main(
     csv_file: str,
     table_name: str,
@@ -155,7 +157,7 @@ def main(
             sys.exit(EXIT_CSV_ERROR)
 
         # Build database config
-        db_config = _build_db_config(
+        db_config: DatabaseConfig = _build_db_config(
             host=host,
             port=port,
             database=database,
@@ -185,17 +187,22 @@ def main(
             click.echo(f"Ingesting {csv_file} into table '{table_name}'...")
 
         # Perform streaming ingestion with optional progress callback
-        progress_callback = None
+        progress_callback: Callable[[int], None] | None = None
         if verbosity == "normal" and not json_output:
             # Try to get total row count for progress bar
             try:
-                total_rows = count_rows(file_path)
+                total_rows: int = count_rows(file_path)
                 progress_callback = _create_progress_callback(total_rows)
+            # pylint: disable=broad-exception-caught
+            # JUSTIFICATION: Must continue without progress bar if row counting fails
             except Exception:  # noqa: S110
                 # If we can't count rows, proceed without progress bar
                 pass
+            # pylint: enable=broad-exception-caught
 
-        result = ingest_streaming_with_pool(db_config, csv_config, progress_callback)
+        result: IngestionResult = ingest_streaming_with_pool(
+            db_config, csv_config, progress_callback
+        )
 
         # Get memory stats for verbose mode
         if verbosity == "verbose":
@@ -234,6 +241,7 @@ def main(
         sys.exit(EXIT_CSV_ERROR)
 
 
+# pylint: disable=too-many-positional-arguments  # JUSTIFICATION: Mirrors CLI parameters for database connection configuration
 def _build_db_config(
     host: str,
     port: int,
@@ -251,8 +259,7 @@ def _build_db_config(
 
     if not all([database, user]):
         raise ConfigurationError(
-            "Database connection requires --database and --user "
-            "(or --database-url / DATABASE_URL)"
+            "Database connection requires --database and --user (or --database-url / DATABASE_URL)"
         )
 
     return DatabaseConfig(
@@ -265,7 +272,7 @@ def _build_db_config(
     )
 
 
-def _create_progress_callback(total_rows: int) -> Any:
+def _create_progress_callback(total_rows: int) -> Callable[[int], None]:
     """Create a progress callback with a rich progress bar.
 
     Args:
@@ -274,7 +281,9 @@ def _create_progress_callback(total_rows: int) -> Any:
     Returns:
         A callback function that updates the progress bar.
     """
+    # pylint: disable=import-outside-toplevel  # JUSTIFICATION: Lazy import for CLI performance - only load rich when progress bar is needed
     from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
+    # pylint: enable=import-outside-toplevel
 
     progress = Progress(
         SpinnerColumn(),
@@ -283,7 +292,7 @@ def _create_progress_callback(total_rows: int) -> Any:
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
         TextColumn("({task.completed}/{task.total} rows)"),
     )
-    task_id = progress.add_task("Processing", total=total_rows)
+    task_id: Any = progress.add_task("Processing", total=total_rows)
     progress.start()
 
     def callback(rows_processed: int) -> None:
@@ -303,7 +312,7 @@ def _output_result(
 ) -> None:
     """Output ingestion result based on format and verbosity."""
     if json_output:
-        output = {
+        output: dict[str, Any] = {
             "status": result.status,
             "rows_processed": result.rows_processed,
             "rows_inserted": result.rows_inserted,
@@ -340,10 +349,8 @@ def _output_result(
 
         # Show verbose stats
         if verbosity == "verbose":
-            throughput = (
-                result.rows_inserted / result.duration_seconds
-                if result.duration_seconds > 0
-                else 0
+            throughput: float = (
+                result.rows_inserted / result.duration_seconds if result.duration_seconds > 0 else 0
             )
             click.echo("\nPerformance stats:")
             click.echo(f"  Throughput: {throughput:.0f} rows/second")
@@ -395,4 +402,4 @@ def _handle_error(
 
 
 if __name__ == "__main__":
-    main()
+    main()  # pylint: disable=no-value-for-parameter  # JUSTIFICATION: Click decorator injects parameters at runtime

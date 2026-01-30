@@ -90,6 +90,8 @@ class DatabaseError(IngestionError):
     """
 
 
+# pylint: disable=redefined-builtin
+# JUSTIFICATION: Domain-specific error type shadows builtin for pipeline error handling
 class ConnectionError(DatabaseError):  # noqa: A001
     """Raised when database connection cannot be established.
 

@@ -4,11 +4,11 @@ Provides connection management, schema detection, table creation, and COPY execu
 Uses psycopg3 for efficient PostgreSQL operations with connection pooling.
 """
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from io import StringIO
-from typing import TYPE_CHECKING
+from typing import Any
 
 import psycopg
 from psycopg import Connection, sql
@@ -19,12 +19,9 @@ from src.csv_postgres_pipeline.exceptions import (
 )
 from src.csv_postgres_pipeline.models import ColumnInfo, DatabaseConfig, TableSchema
 
-if TYPE_CHECKING:
-    from collections.abc import Generator
-
 
 @contextmanager
-def create_connection(config: DatabaseConfig) -> "Generator[Connection]":
+def create_connection(config: DatabaseConfig) -> Generator[Connection]:
     """Create a database connection from configuration.
 
     Args:
@@ -37,11 +34,11 @@ def create_connection(config: DatabaseConfig) -> "Generator[Connection]":
         ConnectionError: If connection cannot be established.
     """
     try:
-        conn = psycopg.connect(config.connection_string)
+        conn: Connection = psycopg.connect(config.connection_string)
         try:
             yield conn
         finally:
-            conn.close()
+            conn.close()  # pylint: disable=no-member  # JUSTIFICATION: Pylint doesn't recognize psycopg Connection.close() method
     except psycopg.OperationalError as e:
         raise PipelineConnectionError(str(e)) from e
     except psycopg.Error as e:
@@ -58,7 +55,7 @@ def get_table_schema(conn: Connection, table_name: str) -> TableSchema | None:
     Returns:
         TableSchema if table exists, None otherwise.
     """
-    query = """
+    query: str = """
         SELECT column_name, data_type, is_nullable, ordinal_position
         FROM information_schema.columns
         WHERE table_name = %s
@@ -67,12 +64,12 @@ def get_table_schema(conn: Connection, table_name: str) -> TableSchema | None:
 
     with conn.cursor() as cur:
         cur.execute(query, (table_name,))
-        rows = cur.fetchall()
+        rows: list[Any] = cur.fetchall()
 
     if not rows:
         return None
 
-    columns = [
+    columns: list[ColumnInfo] = [
         ColumnInfo(
             name=row[0],
             data_type=row[1],
@@ -94,9 +91,11 @@ def create_table(conn: Connection, table_name: str, headers: list[str]) -> None:
         headers: List of column names.
     """
     # Build column definitions (all TEXT)
-    columns = [sql.SQL("{} TEXT").format(sql.Identifier(header)) for header in headers]
+    columns: list[sql.Composable] = [
+        sql.SQL("{} TEXT").format(sql.Identifier(header)) for header in headers
+    ]
 
-    query = sql.SQL("CREATE TABLE {} ({})").format(
+    query: sql.Composed = sql.SQL("CREATE TABLE {} ({})").format(
         sql.Identifier(table_name),
         sql.SQL(", ").join(columns),
     )
@@ -126,8 +125,8 @@ def copy_rows(
         return 0
 
     # Build COPY command with column names
-    columns = sql.SQL(", ").join(sql.Identifier(h) for h in headers)
-    copy_sql = sql.SQL("COPY {} ({}) FROM STDIN WITH (FORMAT CSV)").format(
+    columns: sql.Composable = sql.SQL(", ").join(sql.Identifier(h) for h in headers)
+    copy_sql: sql.Composed = sql.SQL("COPY {} ({}) FROM STDIN WITH (FORMAT CSV)").format(
         sql.Identifier(table_name),
         columns,
     )
@@ -136,7 +135,7 @@ def copy_rows(
     buffer = StringIO()
     for row in rows:
         # Escape fields and write CSV line
-        escaped = []
+        escaped: list[str] = []
         for field in row:
             if field is None:
                 escaped.append("")
@@ -172,17 +171,17 @@ def copy_rows_streaming(
     Returns:
         Number of rows copied.
     """
-    columns = sql.SQL(", ").join(sql.Identifier(h) for h in headers)
-    copy_sql = sql.SQL("COPY {} ({}) FROM STDIN WITH (FORMAT CSV)").format(
+    columns: sql.Composable = sql.SQL(", ").join(sql.Identifier(h) for h in headers)
+    copy_sql: sql.Composed = sql.SQL("COPY {} ({}) FROM STDIN WITH (FORMAT CSV)").format(
         sql.Identifier(table_name),
         columns,
     )
 
-    count = 0
+    count: int = 0
     with conn.cursor() as cur, cur.copy(copy_sql) as copy:
         for row in rows_iterator:
             # Escape and format row
-            escaped = []
+            escaped: list[str] = []
             for field in row:
                 if field is None:
                     escaped.append("")
@@ -190,7 +189,7 @@ def copy_rows_streaming(
                     escaped.append('"' + str(field).replace('"', '""') + '"')
                 else:
                     escaped.append(str(field))
-            line = ",".join(escaped) + "\n"
+            line: str = ",".join(escaped) + "\n"
             copy.write(line.encode("utf-8"))
             count += 1
 
@@ -220,14 +219,14 @@ def compare_schemas(
     Returns:
         SchemaComparisonResult with match status and differences.
     """
-    table_columns = set(table_schema.get_column_names())
-    csv_columns = set(csv_headers)
+    table_columns: set[str] = set(table_schema.get_column_names())
+    csv_columns: set[str] = set(csv_headers)
 
-    missing_in_table = list(csv_columns - table_columns)
-    missing_in_csv = list(table_columns - csv_columns)
-    common_columns = list(csv_columns & table_columns)
+    missing_in_table: list[str] = list(csv_columns - table_columns)
+    missing_in_csv: list[str] = list(table_columns - csv_columns)
+    common_columns: list[str] = list(csv_columns & table_columns)
 
-    is_match = len(missing_in_table) == 0 and len(missing_in_csv) == 0
+    is_match: bool = len(missing_in_table) == 0 and len(missing_in_csv) == 0
 
     return SchemaComparisonResult(
         is_match=is_match,
@@ -250,7 +249,7 @@ def add_columns_to_table(
         column_names: Names of columns to add.
     """
     for col_name in column_names:
-        query = sql.SQL("ALTER TABLE {} ADD COLUMN {} TEXT").format(
+        query: sql.Composed = sql.SQL("ALTER TABLE {} ADD COLUMN {} TEXT").format(
             sql.Identifier(table_name),
             sql.Identifier(col_name),
         )
@@ -268,7 +267,7 @@ def table_exists(conn: Connection, table_name: str) -> bool:
     Returns:
         True if table exists, False otherwise.
     """
-    query = """
+    query: str = """
         SELECT EXISTS (
             SELECT FROM information_schema.tables
             WHERE table_name = %s
@@ -276,7 +275,7 @@ def table_exists(conn: Connection, table_name: str) -> bool:
     """
     with conn.cursor() as cur:
         cur.execute(query, (table_name,))
-        result = cur.fetchone()
+        result: tuple[Any, ...] | None = cur.fetchone()
         return result[0] if result else False
 
 
@@ -320,7 +319,7 @@ def close_pool(pool: ConnectionPool) -> None:
 
 
 @contextmanager
-def get_pooled_connection(pool: ConnectionPool) -> "Generator[Connection]":
+def get_pooled_connection(pool: ConnectionPool) -> Generator[Connection]:
     """Get a connection from the pool.
 
     This is a context manager that automatically returns the connection

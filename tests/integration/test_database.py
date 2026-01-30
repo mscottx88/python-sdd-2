@@ -9,6 +9,22 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import SecretStr
+
+from src.csv_postgres_pipeline import database
+from src.csv_postgres_pipeline.csv_reader import iterate_rows, read_headers
+from src.csv_postgres_pipeline.database import (
+    close_pool,
+    compare_schemas,
+    copy_rows,
+    create_connection,
+    create_pool,
+    create_table,
+    get_pooled_connection,
+    get_table_schema,
+)
+from src.csv_postgres_pipeline.exceptions import ConnectionError
+from src.csv_postgres_pipeline.models import DatabaseConfig
 
 
 @pytest.mark.integration
@@ -17,14 +33,10 @@ class TestDatabaseConnection:
 
     def test_database_module_exists(self) -> None:
         """Test that database module can be imported."""
-        from src.csv_postgres_pipeline import database
-
         assert database is not None
 
     def test_create_connection_function_exists(self) -> None:
         """Test that create_connection function exists."""
-        from src.csv_postgres_pipeline.database import create_connection
-
         assert create_connection is not None
 
     def test_create_connection_success(
@@ -32,28 +44,19 @@ class TestDatabaseConnection:
         db_connection_params: Any,
     ) -> None:
         """Test successful database connection."""
-        from src.csv_postgres_pipeline.database import create_connection
-        from src.csv_postgres_pipeline.models import DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
         with create_connection(db_config) as conn:
             assert conn is not None
             # Verify connection works
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")
-                result = cur.fetchone()
+                result: tuple[Any, ...] | None = cur.fetchone()
                 assert result is not None
                 assert result[0] == 1
 
     def test_create_connection_invalid_credentials(self) -> None:
         """Test connection failure with invalid credentials."""
-        from pydantic import SecretStr
-
-        from src.csv_postgres_pipeline.database import create_connection
-        from src.csv_postgres_pipeline.exceptions import ConnectionError
-        from src.csv_postgres_pipeline.models import DatabaseConfig
-
-        db_config = DatabaseConfig(
+        db_config: DatabaseConfig = DatabaseConfig(
             host="localhost",
             port=5432,
             database="nonexistent_db",
@@ -74,8 +77,6 @@ class TestSchemaDetection:
 
     def test_get_table_schema_function_exists(self) -> None:
         """Test that get_table_schema function exists."""
-        from src.csv_postgres_pipeline.database import get_table_schema
-
         assert get_table_schema is not None
 
     def test_get_table_schema_existing_table(
@@ -83,10 +84,7 @@ class TestSchemaDetection:
         db_connection_params: Any,
     ) -> None:
         """Test schema detection for existing table."""
-        from src.csv_postgres_pipeline.database import create_connection, get_table_schema
-        from src.csv_postgres_pipeline.models import DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
 
         with create_connection(db_config) as conn:
             # Create a test table
@@ -100,7 +98,7 @@ class TestSchemaDetection:
                 """)
             conn.commit()
 
-            schema = get_table_schema(conn, "test_schema_table")
+            schema: Any = get_table_schema(conn, "test_schema_table")
 
             assert schema is not None
             assert "id" in schema.get_column_names()
@@ -117,13 +115,10 @@ class TestSchemaDetection:
         db_connection_params: Any,
     ) -> None:
         """Test schema detection returns None for non-existent table."""
-        from src.csv_postgres_pipeline.database import create_connection, get_table_schema
-        from src.csv_postgres_pipeline.models import DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
 
         with create_connection(db_config) as conn:
-            schema = get_table_schema(conn, "nonexistent_table_xyz")
+            schema: Any = get_table_schema(conn, "nonexistent_table_xyz")
             assert schema is None
 
 
@@ -133,8 +128,6 @@ class TestTableCreation:
 
     def test_create_table_function_exists(self) -> None:
         """Test that create_table function exists."""
-        from src.csv_postgres_pipeline.database import create_table
-
         assert create_table is not None
 
     def test_create_table_from_headers(
@@ -142,16 +135,9 @@ class TestTableCreation:
         db_connection_params: Any,
     ) -> None:
         """Test table creation from CSV headers."""
-        from src.csv_postgres_pipeline.database import (
-            create_connection,
-            create_table,
-            get_table_schema,
-        )
-        from src.csv_postgres_pipeline.models import DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        headers = ["id", "name", "email"]
-        table_name = "test_create_table"
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        headers: list[str] = ["id", "name", "email"]
+        table_name: str = "test_create_table"
 
         with create_connection(db_config) as conn:
             # Ensure table doesn't exist
@@ -164,7 +150,7 @@ class TestTableCreation:
             conn.commit()
 
             # Verify table was created
-            schema = get_table_schema(conn, table_name)
+            schema: Any = get_table_schema(conn, table_name)
             assert schema is not None
             assert set(schema.get_column_names()) == set(headers)
 
@@ -178,16 +164,9 @@ class TestTableCreation:
         db_connection_params: Any,
     ) -> None:
         """Test that created table has all TEXT columns."""
-        from src.csv_postgres_pipeline.database import (
-            create_connection,
-            create_table,
-            get_table_schema,
-        )
-        from src.csv_postgres_pipeline.models import DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        headers = ["col1", "col2", "col3"]
-        table_name = "test_text_columns"
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        headers: list[str] = ["col1", "col2", "col3"]
+        table_name: str = "test_text_columns"
 
         with create_connection(db_config) as conn:
             with conn.cursor() as cur:
@@ -197,7 +176,7 @@ class TestTableCreation:
             create_table(conn, table_name, headers)
             conn.commit()
 
-            schema = get_table_schema(conn, table_name)
+            schema: Any = get_table_schema(conn, table_name)
             assert schema is not None
             for column in schema.columns:
                 assert column.data_type.upper() == "TEXT"
@@ -213,8 +192,6 @@ class TestCOPYExecution:
 
     def test_copy_rows_function_exists(self) -> None:
         """Test that copy_rows function exists."""
-        from src.csv_postgres_pipeline.database import copy_rows
-
         assert copy_rows is not None
 
     def test_copy_rows_inserts_data(
@@ -223,16 +200,8 @@ class TestCOPYExecution:
         db_connection_params: Any,
     ) -> None:
         """Test COPY inserts data correctly."""
-        from src.csv_postgres_pipeline.csv_reader import iterate_rows, read_headers
-        from src.csv_postgres_pipeline.database import (
-            copy_rows,
-            create_connection,
-            create_table,
-        )
-        from src.csv_postgres_pipeline.models import DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        table_name = "test_copy_rows"
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        table_name: str = "test_copy_rows"
 
         with create_connection(db_config) as conn:
             # Setup
@@ -240,13 +209,13 @@ class TestCOPYExecution:
                 cur.execute(f"DROP TABLE IF EXISTS {table_name}")
             conn.commit()
 
-            headers = read_headers(sample_csv_file)
+            headers: list[str] = read_headers(sample_csv_file)
             create_table(conn, table_name, headers)
             conn.commit()
 
             # Execute COPY
-            rows = list(iterate_rows(sample_csv_file))
-            rows_copied = copy_rows(conn, table_name, headers, rows)
+            rows: list[list[str]] = list(iterate_rows(sample_csv_file))
+            rows_copied: int = copy_rows(conn, table_name, headers, rows)
             conn.commit()
 
             assert rows_copied == 3
@@ -254,9 +223,9 @@ class TestCOPYExecution:
             # Verify data
             with conn.cursor() as cur:
                 cur.execute(f"SELECT COUNT(*) FROM {table_name}")  # noqa: S608
-                result = cur.fetchone()
+                result: tuple[Any, ...] | None = cur.fetchone()
                 assert result is not None
-                count = result[0]
+                count: Any = result[0]
                 assert count == 3
 
             # Cleanup
@@ -270,28 +239,20 @@ class TestCOPYExecution:
         db_connection_params: Any,
     ) -> None:
         """Test COPY returns correct row count."""
-        from src.csv_postgres_pipeline.csv_reader import iterate_rows, read_headers
-        from src.csv_postgres_pipeline.database import (
-            copy_rows,
-            create_connection,
-            create_table,
-        )
-        from src.csv_postgres_pipeline.models import DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        table_name = "test_copy_count"
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        table_name: str = "test_copy_count"
 
         with create_connection(db_config) as conn:
             with conn.cursor() as cur:
                 cur.execute(f"DROP TABLE IF EXISTS {table_name}")
             conn.commit()
 
-            headers = read_headers(sample_csv_file)
+            headers: list[str] = read_headers(sample_csv_file)
             create_table(conn, table_name, headers)
             conn.commit()
 
-            rows = list(iterate_rows(sample_csv_file))
-            rows_copied = copy_rows(conn, table_name, headers, rows)
+            rows: list[list[str]] = list(iterate_rows(sample_csv_file))
+            rows_copied: int = copy_rows(conn, table_name, headers, rows)
 
             assert rows_copied == len(rows)
 
@@ -306,8 +267,6 @@ class TestSchemaComparison:
 
     def test_compare_schemas_function_exists(self) -> None:
         """Test that compare_schemas function exists."""
-        from src.csv_postgres_pipeline.database import compare_schemas
-
         assert compare_schemas is not None
 
     def test_compare_schemas_matching(
@@ -315,15 +274,8 @@ class TestSchemaComparison:
         db_connection_params: Any,
     ) -> None:
         """Test schema comparison with matching schemas."""
-        from src.csv_postgres_pipeline.database import (
-            compare_schemas,
-            create_connection,
-            get_table_schema,
-        )
-        from src.csv_postgres_pipeline.models import DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        csv_headers = ["id", "name", "email"]
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        csv_headers: list[str] = ["id", "name", "email"]
 
         with create_connection(db_config) as conn:
             with conn.cursor() as cur:
@@ -336,9 +288,9 @@ class TestSchemaComparison:
                 """)
             conn.commit()
 
-            table_schema = get_table_schema(conn, "test_match_schema")
+            table_schema: Any = get_table_schema(conn, "test_match_schema")
             assert table_schema is not None
-            result = compare_schemas(csv_headers, table_schema)
+            result: Any = compare_schemas(csv_headers, table_schema)
 
             assert result.is_match is True
             assert len(result.missing_in_table) == 0
@@ -353,15 +305,8 @@ class TestSchemaComparison:
         db_connection_params: Any,
     ) -> None:
         """Test schema comparison detects columns missing in table."""
-        from src.csv_postgres_pipeline.database import (
-            compare_schemas,
-            create_connection,
-            get_table_schema,
-        )
-        from src.csv_postgres_pipeline.models import DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        csv_headers = ["id", "name", "email", "phone"]  # phone is extra
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        csv_headers: list[str] = ["id", "name", "email", "phone"]  # phone is extra
 
         with create_connection(db_config) as conn:
             with conn.cursor() as cur:
@@ -374,9 +319,9 @@ class TestSchemaComparison:
                 """)
             conn.commit()
 
-            table_schema = get_table_schema(conn, "test_missing_col")
+            table_schema: Any = get_table_schema(conn, "test_missing_col")
             assert table_schema is not None
-            result = compare_schemas(csv_headers, table_schema)
+            result: Any = compare_schemas(csv_headers, table_schema)
 
             assert result.is_match is False
             assert "phone" in result.missing_in_table
@@ -396,11 +341,7 @@ class TestTransactionWrapper:
     ) -> None:
         """Test transaction rollback on error."""
         pytest.importorskip("psycopg", reason="psycopg not installed")
-
-        from src.csv_postgres_pipeline.database import create_connection
-        from src.csv_postgres_pipeline.models import DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
 
         with create_connection(db_config) as conn:
             with conn.cursor() as cur:
@@ -420,9 +361,9 @@ class TestTransactionWrapper:
             # Verify rollback happened
             with conn.cursor() as cur:
                 cur.execute("SELECT COUNT(*) FROM test_rollback")
-                result = cur.fetchone()
+                result: tuple[Any, ...] | None = cur.fetchone()
                 assert result is not None
-                count = result[0]
+                count: Any = result[0]
                 assert count == 0
 
             with conn.cursor() as cur:
@@ -436,20 +377,14 @@ class TestConnectionPooling:
 
     def test_create_pool_function_exists(self) -> None:
         """Test that create_pool function exists."""
-        from src.csv_postgres_pipeline.database import create_pool
-
         assert create_pool is not None
 
     def test_close_pool_function_exists(self) -> None:
         """Test that close_pool function exists."""
-        from src.csv_postgres_pipeline.database import close_pool
-
         assert close_pool is not None
 
     def test_get_pooled_connection_function_exists(self) -> None:
         """Test that get_pooled_connection function exists."""
-        from src.csv_postgres_pipeline.database import get_pooled_connection
-
         assert get_pooled_connection is not None
 
     def test_create_pool_basic(
@@ -457,11 +392,8 @@ class TestConnectionPooling:
         db_connection_params: Any,
     ) -> None:
         """Test creating a connection pool."""
-        from src.csv_postgres_pipeline.database import close_pool, create_pool
-        from src.csv_postgres_pipeline.models import DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        pool = create_pool(db_config)
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        pool: Any = create_pool(db_config)
 
         try:
             assert pool is not None
@@ -476,22 +408,15 @@ class TestConnectionPooling:
         db_connection_params: Any,
     ) -> None:
         """Test getting a connection from the pool."""
-        from src.csv_postgres_pipeline.database import (
-            close_pool,
-            create_pool,
-            get_pooled_connection,
-        )
-        from src.csv_postgres_pipeline.models import DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        pool = create_pool(db_config)
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        pool: Any = create_pool(db_config)
 
         try:
             with get_pooled_connection(pool) as conn:
                 assert conn is not None
                 with conn.cursor() as cur:
                     cur.execute("SELECT 1")
-                    result = cur.fetchone()
+                    result: tuple[Any, ...] | None = cur.fetchone()
                     assert result is not None
                     assert result[0] == 1
         finally:
@@ -502,35 +427,28 @@ class TestConnectionPooling:
         db_connection_params: Any,
     ) -> None:
         """Test that connections are reused from pool."""
-        from src.csv_postgres_pipeline.database import (
-            close_pool,
-            create_pool,
-            get_pooled_connection,
-        )
-        from src.csv_postgres_pipeline.models import DatabaseConfig
-
         # Use max_size=1 to guarantee connection reuse (only one connection exists)
-        db_config = DatabaseConfig(
+        db_config: DatabaseConfig = DatabaseConfig(
             **db_connection_params,
             pool_min_size=1,
             pool_max_size=1,
         )
-        pool = create_pool(db_config)
+        pool: Any = create_pool(db_config)
 
         try:
             # Get a connection, use it, return it
             with get_pooled_connection(pool) as conn1, conn1.cursor() as cur:  # noqa: SIM117
                 cur.execute("SELECT pg_backend_pid()")
-                result1 = cur.fetchone()
+                result1: tuple[Any, ...] | None = cur.fetchone()
                 assert result1 is not None
-                pid1 = result1[0]
+                pid1: Any = result1[0]
 
             # Get another connection - must be reused since max_size=1
             with get_pooled_connection(pool) as conn2, conn2.cursor() as cur:  # noqa: SIM117
                 cur.execute("SELECT pg_backend_pid()")
-                result2 = cur.fetchone()
+                result2: tuple[Any, ...] | None = cur.fetchone()
                 assert result2 is not None
-                pid2 = result2[0]
+                pid2: Any = result2[0]
 
             # Same PID means connection was reused
             assert pid1 == pid2
@@ -542,15 +460,12 @@ class TestConnectionPooling:
         db_connection_params: Any,
     ) -> None:
         """Test pool respects custom min/max sizes."""
-        from src.csv_postgres_pipeline.database import close_pool, create_pool
-        from src.csv_postgres_pipeline.models import DatabaseConfig
-
-        db_config = DatabaseConfig(
+        db_config: DatabaseConfig = DatabaseConfig(
             **db_connection_params,
             pool_min_size=2,
             pool_max_size=10,
         )
-        pool = create_pool(db_config)
+        pool: Any = create_pool(db_config)
 
         try:
             assert pool.min_size == 2
@@ -563,19 +478,12 @@ class TestConnectionPooling:
         db_connection_params: Any,
     ) -> None:
         """Test pool can provide multiple concurrent connections."""
-        from src.csv_postgres_pipeline.database import (
-            close_pool,
-            create_pool,
-            get_pooled_connection,
-        )
-        from src.csv_postgres_pipeline.models import DatabaseConfig
-
-        db_config = DatabaseConfig(
+        db_config: DatabaseConfig = DatabaseConfig(
             **db_connection_params,
             pool_min_size=1,
             pool_max_size=3,
         )
-        pool = create_pool(db_config)
+        pool: Any = create_pool(db_config)
 
         try:
             # Hold two connections simultaneously
@@ -586,12 +494,12 @@ class TestConnectionPooling:
                 # Both should work independently
                 with conn1.cursor() as cur1:
                     cur1.execute("SELECT 1")
-                    result1 = cur1.fetchone()
+                    result1: tuple[Any, ...] | None = cur1.fetchone()
                     assert result1 is not None
                     assert result1[0] == 1
                 with conn2.cursor() as cur2:
                     cur2.execute("SELECT 2")
-                    result2 = cur2.fetchone()
+                    result2: tuple[Any, ...] | None = cur2.fetchone()
                     assert result2 is not None
                     assert result2[0] == 2
         finally:

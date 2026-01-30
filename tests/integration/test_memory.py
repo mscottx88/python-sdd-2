@@ -17,6 +17,9 @@ from typing import Any
 
 import pytest
 
+from src.csv_postgres_pipeline.ingestion import ingest_streaming
+from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig, IngestionResult
+
 
 @pytest.fixture
 def very_large_csv_file() -> Generator[Path]:
@@ -32,7 +35,7 @@ def very_large_csv_file() -> Generator[Path]:
         newline="",
         encoding="utf-8",
     ) as f:
-        writer = csv.writer(f)
+        writer: Any = csv.writer(f)  # csv.writer returns internal _writer type
         writer.writerow(["id", "name", "email", "department", "description"])
         for i in range(50000):
             writer.writerow(
@@ -44,7 +47,7 @@ def very_large_csv_file() -> Generator[Path]:
                     f"This is a longer description field for row {i} to add more data",
                 ]
             )
-        temp_path = Path(f.name)
+        temp_path: Path = Path(f.name)
 
     yield temp_path
 
@@ -66,11 +69,8 @@ class TestMemoryBoundedIngestion:
         SC-002: System maintains less than 100MB memory usage regardless
         of input file size.
         """
-        from src.csv_postgres_pipeline.ingestion import ingest_streaming
-        from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        csv_config = CSVConfig(
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        csv_config: CSVConfig = CSVConfig(
             file_path=very_large_csv_file,
             table_name="test_memory_bounded_50k",
             chunk_size=1000,
@@ -82,13 +82,13 @@ class TestMemoryBoundedIngestion:
         # Start memory tracking
         tracemalloc.start()
 
-        result = ingest_streaming(db_config, csv_config)
+        result: IngestionResult = ingest_streaming(db_config, csv_config)
 
         # Get peak memory usage
         _, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
 
-        peak_mb = peak / (1024 * 1024)
+        peak_mb: float = peak / (1024 * 1024)
 
         assert result.status == "success"
         assert result.rows_inserted == 50000
@@ -106,11 +106,8 @@ class TestMemoryBoundedIngestion:
         that memory usage does not grow linearly with the number of rows processed.
         True streaming should maintain relatively constant memory.
         """
-        from src.csv_postgres_pipeline.ingestion import ingest_streaming
-        from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        csv_config = CSVConfig(
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        csv_config: CSVConfig = CSVConfig(
             file_path=very_large_csv_file,
             table_name="test_memory_constant",
             chunk_size=1000,
@@ -126,7 +123,9 @@ class TestMemoryBoundedIngestion:
         gc.collect()
         tracemalloc.start()
 
-        result = ingest_streaming(db_config, csv_config, progress_callback=sample_memory)
+        result: IngestionResult = ingest_streaming(
+            db_config, csv_config, progress_callback=sample_memory
+        )
 
         tracemalloc.stop()
 
@@ -137,16 +136,16 @@ class TestMemoryBoundedIngestion:
         # Calculate memory growth rate
         # For true streaming, memory should not grow significantly as rows increase
         if len(memory_samples) >= 2:
-            first_sample = memory_samples[0]
-            last_sample = memory_samples[-1]
+            first_sample: tuple[int, float] = memory_samples[0]
+            last_sample: tuple[int, float] = memory_samples[-1]
 
-            rows_increase = last_sample[0] - first_sample[0]
-            memory_increase_mb = last_sample[1] - first_sample[1]
+            rows_increase: int = last_sample[0] - first_sample[0]
+            memory_increase_mb: float = last_sample[1] - first_sample[1]
 
             # Memory should not grow more than 0.5KB per 1000 rows
             # (allowing some overhead but catching linear growth)
             if rows_increase > 0:
-                growth_rate_mb_per_1k_rows = (memory_increase_mb / rows_increase) * 1000
+                growth_rate_mb_per_1k_rows: float = (memory_increase_mb / rows_increase) * 1000
                 assert growth_rate_mb_per_1k_rows < 0.5, (
                     f"Memory grew {growth_rate_mb_per_1k_rows:.4f}MB per 1000 rows. "
                     "This suggests data is being accumulated rather than streamed."
@@ -162,13 +161,11 @@ class TestMemoryBoundedIngestion:
         Verifies that the chunk_size parameter actually controls memory usage
         by comparing peak memory with different chunk sizes.
         """
-        from src.csv_postgres_pipeline.ingestion import ingest_streaming
-        from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
 
         def measure_peak_memory(chunk_size: int, table_suffix: str) -> float:
             """Measure peak memory for a given chunk size."""
-            db_config = DatabaseConfig(**db_connection_params)
-            csv_config = CSVConfig(
+            db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+            csv_config: CSVConfig = CSVConfig(
                 file_path=large_csv_file,
                 table_name=f"test_chunk_memory_{table_suffix}",
                 chunk_size=chunk_size,
@@ -176,17 +173,19 @@ class TestMemoryBoundedIngestion:
 
             gc.collect()
             tracemalloc.start()
-            ingest_streaming(db_config, csv_config)
+            _result: IngestionResult = ingest_streaming(db_config, csv_config)
+            _: int
+            peak: int
             _, peak = tracemalloc.get_traced_memory()
             tracemalloc.stop()
 
             return peak / (1024 * 1024)
 
         # Measure with small chunks
-        peak_small = measure_peak_memory(100, "small")
+        peak_small: float = measure_peak_memory(100, "small")
 
         # Measure with large chunks
-        peak_large = measure_peak_memory(5000, "large")
+        peak_large: float = measure_peak_memory(5000, "large")
 
         # Larger chunks should use more memory
         # (This verifies chunk_size actually affects buffering)
@@ -209,11 +208,8 @@ class TestMemoryBoundedIngestion:
         Verifies there are no memory leaks by checking that memory returns
         to near baseline after ingestion and garbage collection.
         """
-        from src.csv_postgres_pipeline.ingestion import ingest_streaming
-        from src.csv_postgres_pipeline.models import CSVConfig, DatabaseConfig
-
-        db_config = DatabaseConfig(**db_connection_params)
-        csv_config = CSVConfig(
+        db_config: DatabaseConfig = DatabaseConfig(**db_connection_params)
+        csv_config: CSVConfig = CSVConfig(
             file_path=large_csv_file,
             table_name="test_memory_release",
             chunk_size=500,
@@ -223,25 +219,28 @@ class TestMemoryBoundedIngestion:
         tracemalloc.start()
 
         # Capture baseline
+        baseline: int
+        _: int
         baseline, _ = tracemalloc.get_traced_memory()
 
         # Perform ingestion
-        result = ingest_streaming(db_config, csv_config)
+        result: IngestionResult = ingest_streaming(db_config, csv_config)
         assert result.status == "success"
 
         # Force cleanup
         gc.collect()
 
         # Check memory after cleanup
+        after_gc: int
         after_gc, _ = tracemalloc.get_traced_memory()
         tracemalloc.stop()
 
-        baseline_mb = baseline / (1024 * 1024)
-        after_gc_mb = after_gc / (1024 * 1024)
+        baseline_mb: float = baseline / (1024 * 1024)
+        after_gc_mb: float = after_gc / (1024 * 1024)
 
         # Memory after GC should be within 10MB of baseline
         # (allowing for some retained objects like cached modules)
-        memory_retained_mb = after_gc_mb - baseline_mb
+        memory_retained_mb: float = after_gc_mb - baseline_mb
         assert memory_retained_mb < 10, (
             f"Memory not properly released: {memory_retained_mb:.2f}MB retained "
             f"(baseline: {baseline_mb:.2f}MB, after: {after_gc_mb:.2f}MB)"

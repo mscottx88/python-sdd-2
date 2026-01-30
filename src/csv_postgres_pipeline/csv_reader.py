@@ -49,20 +49,18 @@ def read_headers(file_path: Path) -> list[str]:
         raise EmptyFileError(f"CSV file is empty: {file_path}", file_path=file_path)
 
     with file_path.open(encoding="utf-8", newline="") as f:
-        reader = csv.reader(f)
+        reader: Iterator[list[str]] = csv.reader(f)
         try:
-            headers = next(reader)
+            headers: list[str] = next(reader)
             return headers
         except StopIteration:
-            raise EmptyFileError(
-                f"CSV file is empty: {file_path}", file_path=file_path
-            ) from None
+            raise EmptyFileError(f"CSV file is empty: {file_path}", file_path=file_path) from None
 
 
 def iterate_rows(
     file_path: Path,
     *,
-    allow_empty: bool = False,  # noqa: ARG001
+    allow_empty: bool = False,  # noqa: ARG001  # pylint: disable=unused-argument  # JUSTIFICATION: Kept for API compatibility
 ) -> Generator[list[str]]:
     """Iterate over data rows in a CSV file, skipping the header.
 
@@ -84,14 +82,12 @@ def iterate_rows(
         raise EmptyFileError(f"CSV file is empty: {file_path}", file_path=file_path)
 
     with file_path.open(encoding="utf-8", newline="") as f:
-        reader = csv.reader(f)
+        reader: Iterator[list[str]] = csv.reader(f)
         # Skip header row
         try:
             next(reader)
         except StopIteration:
-            raise EmptyFileError(
-                f"CSV file is empty: {file_path}", file_path=file_path
-            ) from None
+            raise EmptyFileError(f"CSV file is empty: {file_path}", file_path=file_path) from None
 
         # Yield data rows
         yield from reader
@@ -122,16 +118,16 @@ def iterate_rows_with_line_numbers(
         raise EmptyFileError(f"CSV file is empty: {file_path}", file_path=file_path)
 
     with file_path.open(encoding="utf-8", newline="") as f:
-        reader = csv.reader(f)
+        reader: Iterator[list[str]] = csv.reader(f)
         # Skip header row (line 1)
         try:
             next(reader)
         except StopIteration:
-            raise EmptyFileError(
-                f"CSV file is empty: {file_path}", file_path=file_path
-            ) from None
+            raise EmptyFileError(f"CSV file is empty: {file_path}", file_path=file_path) from None
 
         # Yield data rows with line numbers starting at 2
+        line_number: int
+        row: list[str]
         for line_number, row in enumerate(reader, start=2):  # noqa: UP028
             yield line_number, row
 
@@ -150,7 +146,7 @@ def validate_row(
     Returns:
         Tuple of (is_valid, reason). If valid, reason is empty string.
     """
-    actual_columns = len(row)
+    actual_columns: int = len(row)
     if actual_columns == expected_columns:
         return True, ""
     return (
@@ -178,9 +174,9 @@ def count_rows(file_path: Path) -> int:
     if is_file_empty(file_path):
         raise EmptyFileError(f"CSV file is empty: {file_path}", file_path=file_path)
 
-    count = 0
+    count: int = 0
     with file_path.open(encoding="utf-8", newline="") as f:
-        reader = csv.reader(f)
+        reader: Iterator[list[str]] = csv.reader(f)
         # Skip header
         try:
             next(reader)
@@ -212,7 +208,7 @@ def has_data_rows(file_path: Path) -> bool:
         return False
 
     with file_path.open(encoding="utf-8", newline="") as f:
-        reader = csv.reader(f)
+        reader: Iterator[list[str]] = csv.reader(f)
         # Skip header
         try:
             next(reader)
@@ -253,8 +249,8 @@ def iterate_rows_validated(
         MalformedRowError: In strict mode when a row has wrong column count.
         EmptyFileError: If the file is empty.
     """
-    headers = read_headers(file_path)
-    expected_columns = len(headers)
+    headers: list[str] = read_headers(file_path)
+    expected_columns: int = len(headers)
 
     if mode == "strict":
         return _iterate_strict(file_path, expected_columns)
@@ -274,9 +270,8 @@ def _iterate_strict(
         for line_number, row in iterate_rows_with_line_numbers(file_path):
             is_valid, _ = validate_row(row, expected_columns=expected_columns)
             if not is_valid:
-                msg = (
-                    f"Row at line {line_number} has {len(row)} columns, "
-                    f"expected {expected_columns}"
+                msg: str = (
+                    f"Row at line {line_number} has {len(row)} columns, expected {expected_columns}"
                 )
                 raise MalformedRowError(
                     msg,
@@ -316,7 +311,7 @@ def _iterate_lenient(
 
     def generator() -> Generator[list[str]]:
         for _line_number, row in iterate_rows_with_line_numbers(file_path):
-            actual_columns = len(row)
+            actual_columns: int = len(row)
             if actual_columns < expected_columns:
                 # Pad with empty strings
                 row = row + [""] * (expected_columns - actual_columns)
@@ -372,8 +367,7 @@ def iterate_chunks_validated(
     *,
     mode: RowMode = "strict",
 ) -> (
-    Generator[list[list[str]]]
-    | tuple[Generator[list[list[str]]], list[tuple[int, str, list[str]]]]
+    Generator[list[list[str]]] | tuple[Generator[list[list[str]]], list[tuple[int, str, list[str]]]]
 ):
     """Iterate over CSV rows in validated chunks with configurable error handling.
 
@@ -397,8 +391,8 @@ def iterate_chunks_validated(
         MalformedRowError: In strict mode when a row has wrong column count.
         EmptyFileError: If the file is empty.
     """
-    headers = read_headers(file_path)
-    expected_columns = len(headers)
+    headers: list[str] = read_headers(file_path)
+    expected_columns: int = len(headers)
 
     if mode == "strict":
         return _iterate_chunks_strict(file_path, chunk_size, expected_columns)
@@ -419,9 +413,8 @@ def _iterate_chunks_strict(
     for line_number, row in iterate_rows_with_line_numbers(file_path):
         is_valid, _ = validate_row(row, expected_columns=expected_columns)
         if not is_valid:
-            msg = (
-                f"Row at line {line_number} has {len(row)} columns, "
-                f"expected {expected_columns}"
+            msg: str = (
+                f"Row at line {line_number} has {len(row)} columns, expected {expected_columns}"
             )
             raise MalformedRowError(
                 msg,
@@ -477,7 +470,7 @@ def _iterate_chunks_lenient(
         chunk: list[list[str]] = []
 
         for _line_number, row in iterate_rows_with_line_numbers(file_path):
-            actual_columns = len(row)
+            actual_columns: int = len(row)
             if actual_columns < expected_columns:
                 row = row + [""] * (expected_columns - actual_columns)
             elif actual_columns > expected_columns:

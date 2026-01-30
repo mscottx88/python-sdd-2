@@ -81,6 +81,45 @@
   - Added Data Models subsection with Pydantic requirements
 -->
 
+<!--
+  Sync Impact Report - Constitution v1.10.0
+
+  Version Change: 1.9.0 → 1.10.0 (MINOR)
+
+  Rationale: Strengthened type hint requirements to mandate ALL local variables have
+  explicit type annotations, eliminating subjective judgment about what is "obvious".
+  This aligns constitution with CLAUDE.md strict policy and removes ambiguity that
+  previously allowed developers to skip type hints for "obvious" assignments.
+
+  Modified Principles:
+  - Principle V (Code Quality Standards): Strengthened type hint requirements for local variables
+
+  Modified Sections:
+  - Core Principles > V. Code Quality Standards > Type Hints > Variable assignments (Line 494)
+  - Core Principles > V. Code Quality Standards > Type Hints > Trivial types (Lines 503-509)
+
+  Added Sections: None
+  Removed Sections: None
+
+  Templates Requiring Updates:
+  ✅ CLAUDE.md - Already reflects strict policy (Line 64)
+  ⚠️  All Python code - Must add explicit type hints to local variables
+
+  Follow-up TODOs:
+  - Fix 8 local variable violations in scripts/benchmark_connection_overhead.py
+  - Fix 17 Generator type specifications in src/csv_postgres_pipeline/csv_reader.py and database.py
+  - Fix 3 vague type hints (Any) in cli.py, conftest.py, ingestion.py
+  - Remove 2 type: ignore suppressions in tests/unit/test_csv_reader.py
+
+  Notes:
+  - NO EXCEPTIONS: "Obvious" assignments like `count = 0` now REQUIRE `count: int = 0`
+  - Eliminates judgment calls - ALL local variables get type hints
+  - Consistent with "explicit better than implicit" Python philosophy
+  - Prevents refactoring bugs where types change unexpectedly
+
+  Previous Changes (v1.9.0): Added Pylance requirements
+-->
+
 # Python-SDD Constitution
 
 ## Core Principles
@@ -180,7 +219,7 @@ All Python code MUST adhere to:
 - **Linting**: ruff (E, W, F, I, N, UP, B, C4, SIM, S rules) + pylint
 - **Type checking**: mypy with strict mode + Pylance (VS Code language server)
 - **Testing**: pytest with appropriate coverage
-- **Formatting**: ruff format with 90-char line length
+- **Formatting**: ruff format with 100-char line length
 - **Commits**: Conventional Commits format
 - **Pre-commit hooks**: Automated quality checks enforced
 
@@ -225,7 +264,7 @@ All Python code MUST strictly follow PEP 8 -- Style Guide for Python Code:
 - **Import placement**: ALL imports MUST be at the top of the file, immediately after module docstring and before any module-level code
 - **Import ordering**: Group imports by: (1) standard library, (2) third-party packages, (3) local application/library imports (separated by blank lines)
 - **No inline imports**: Imports inside functions, methods, or classes are STRICTLY PROHIBITED (except in rare cases with explicit constitution amendment)
-- **Line length**: Maximum 88-90 characters (ruff/Black compatible)
+- **Line length**: Maximum 100 characters
 - **Naming conventions**: snake_case for functions/variables, PascalCase for classes, UPPER_CASE for constants
 - **Whitespace**: Follow PEP 8 spacing rules for operators, commas, colons
 - **Docstrings**: Required for all public modules, functions, classes, and methods
@@ -491,7 +530,7 @@ All Python code MUST include comprehensive, explicit type hints throughout:
 - **Variable assignments**: Explicit type annotations REQUIRED for:
   - Module-level constants: `MAX_RETRIES: int = 3`
   - Class attributes: `name: str`, `count: int`
-  - Local variables when type is not immediately obvious from assignment
+  - ALL local variables MUST have explicit type annotations (even when type appears obvious)
   - Variables assigned `None`: `result: str | None = None` (NEVER `result = None`)
 - **Class attributes**: Type hints REQUIRED on all class and instance variables
   - Instance attributes in `__init__`: `self.name: str = name`
@@ -500,11 +539,13 @@ All Python code MUST include comprehensive, explicit type hints throughout:
   - Test parameters: `def test_validation(mock_db: MockDatabase) -> None:`
   - Pytest fixtures: `def sample_data() -> dict[str, Any]:`
   - Test helpers: `def create_user(name: str, age: int) -> User:`
-- **Trivial types MUST be explicit**: Even when "obvious", annotate:
+- **ALL local variables MUST be explicit**: Type hints required even for "obvious" assignments:
   - String literals: `message: str = "hello"` (not `message = "hello"`)
   - Integer literals: `count: int = 0` (not `count = 0`)
+  - Floats: `value: float = 1.5` (not `value = 1.5`)
   - Boolean literals: `is_valid: bool = True` (not `is_valid = True`)
   - Empty collections: `items: list[str] = []` (not `items = []`)
+  - Function call results: `elapsed: float = time.perf_counter()` (not `elapsed = time.perf_counter()`)
   - Any/None: `result: Any | None = None` (not `result = None`)
 - **mypy compliance**: All code MUST pass `mypy --strict` with zero errors
 
@@ -604,4 +645,4 @@ This constitution supersedes all other development practices and guidelines.
 - Code reviews verify constitution adherence
 - Failed gates block merges
 
-**Version**: 1.9.0 | **Ratified**: 2026-01-20 | **Last Amended**: 2026-01-22
+**Version**: 1.10.0 | **Ratified**: 2026-01-20 | **Last Amended**: 2026-01-28

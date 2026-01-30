@@ -8,14 +8,14 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
-from urllib.parse import urlparse
+from urllib.parse import ParseResult, urlparse
 
 from pydantic import BaseModel, Field, SecretStr
 
 
 def _get_env_port() -> int:
     """Get port from PGPORT environment variable or return default."""
-    port_str = os.environ.get("PGPORT", "") or "5432"
+    port_str: str = os.environ.get("PGPORT", "") or "5432"
     try:
         return int(port_str)
     except ValueError:
@@ -64,9 +64,7 @@ class DatabaseConfig(BaseModel):
     # Connection pool settings
     pool_min_size: int = Field(default=1, ge=1, le=10)
     pool_max_size: int = Field(default=5, ge=1, le=50)
-    pool_timeout: float = Field(
-        default=30.0, gt=0, description="Connection timeout in seconds"
-    )
+    pool_timeout: float = Field(default=30.0, gt=0, description="Connection timeout in seconds")
 
     @property
     def connection_string(self) -> str:
@@ -75,10 +73,12 @@ class DatabaseConfig(BaseModel):
         Returns:
             Connection URL in postgresql:// format.
         """
+        # pylint: disable=no-member  # JUSTIFICATION: Pylint doesn't recognize Pydantic SecretStr.get_secret_value() method
         return (
             f"postgresql://{self.user}:{self.password.get_secret_value()}"
             f"@{self.host}:{self.port}/{self.database}"
         )
+        # pylint: enable=no-member
 
     @classmethod
     def from_url(
@@ -100,7 +100,7 @@ class DatabaseConfig(BaseModel):
         Returns:
             DatabaseConfig instance.
         """
-        parsed = urlparse(url)
+        parsed: ParseResult = urlparse(url)
         return cls(
             host=parsed.hostname or "localhost",
             port=parsed.port or 5432,
@@ -134,15 +134,13 @@ class CSVConfig(BaseModel):
     schema_mode: Literal["strict", "match", "alter"] = Field(
         default="strict",
         description=(
-            "Schema mismatch handling: "
-            "strict=fail, match=common columns, alter=add columns"
+            "Schema mismatch handling: strict=fail, match=common columns, alter=add columns"
         ),
     )
     row_mode: Literal["strict", "skip", "lenient"] = Field(
         default="strict",
         description=(
-            "Malformed row handling: "
-            "strict=fail, skip=log and continue, lenient=pad/truncate"
+            "Malformed row handling: strict=fail, skip=log and continue, lenient=pad/truncate"
         ),
     )
     empty_mode: Literal["strict", "headers", "permissive"] = Field(
@@ -249,9 +247,7 @@ class TableSchema(BaseModel):
         Returns:
             Column names sorted by ordinal position.
         """
-        return [
-            col.name for col in sorted(self.columns, key=lambda c: c.ordinal_position)
-        ]
+        return [col.name for col in sorted(self.columns, key=lambda c: c.ordinal_position)]
 
     def has_column(self, name: str) -> bool:
         """Check if column exists (case-insensitive).
