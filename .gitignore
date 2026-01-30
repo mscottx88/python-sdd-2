@@ -52,3 +52,17 @@ output/
 
 # Environment variables
 .env
+
+# Local configuration
+settings.local.json
+.claude/settings.local.json
+
+# SDD-specific (working files, not project artifacts)
+.specify/memory/context/
+.specify/features/*/plan.md
+.specify/features/*/tasks.md
+.specify/features/*/.agent-context.md
+
+# Claude Code session files
+.claude/chats/
+.claude/sessions/
